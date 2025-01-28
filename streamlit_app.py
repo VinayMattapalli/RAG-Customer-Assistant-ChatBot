@@ -1,33 +1,60 @@
 import streamlit as st
-from langchain.chains import RetrievalQA
-import pandas as pd
+import pickle
+from sentence_transformers import SentenceTransformer
 import faiss
-from langchain.vectorstores import FAISS
-from langchain.chat_models import ChatOpenAI
 
-# Load FAQ data and FAISS index
-faq_data = pd.read_csv('faq_data.csv')
-index = faiss.read_index('faq_index.faiss')
+# Load FAISS index and FAQ data
+faiss_index = faiss.read_index("faq_index.faiss")
+with open("faq_data.pkl", "rb") as f:
+    faq_data = pickle.load(f)
 
-# Create FAISS vector store
-vector_store = FAISS(
-    embeddings=None,  # FAISS index already has embeddings
-    index=index,
-    texts=faq_data['Answer'].tolist()
-)
+# Load SentenceTransformer model
+model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
 
-# Initialize GPT model
-llm = ChatOpenAI(model="gpt-4", temperature=0)
+# Streamlit App
+st.set_page_config(page_title="RAG Chatbot", layout="wide", initial_sidebar_state="expanded")
 
-# Build RAG pipeline
-retriever = vector_store.as_retriever()
-rag_pipeline = RetrievalQA(llm=llm, retriever=retriever)
+# Sidebar
+st.sidebar.title("RAG Chatbot")
+st.sidebar.markdown("""
+**Navigation**
+- Home
+- About
+- Contact
+""")
+st.sidebar.info("This is a Retrieval-Augmented Generation (RAG) chatbot.")
 
-# Streamlit interface
+# Main App
 st.title("RAG Chatbot")
-st.write("Ask questions about the FAQs, and I'll provide the answers!")
+st.subheader("Ask a question to the FAQ knowledge base:")
 
-query = st.text_input("Enter your question:")
-if query:
-    response = rag_pipeline.run(query)
-    st.write("Answer:", response)
+# User Input
+user_question = st.text_input("Your Question", placeholder="Type your question here...")
+if user_question:
+    st.markdown(f"**You asked:** {user_question}")
+
+    # Generate embeddings and search
+    question_embedding = model.encode([user_question])
+    distances, indices = faiss_index.search(question_embedding, k=3)
+
+    # Results Display
+    results = []
+    for i, idx in enumerate(indices[0]):
+        if distances[0][i] >= 1.0:  # Adjust threshold as needed
+            break
+        faq_entry = faq_data.iloc[idx]
+        results.append({
+            "question": faq_entry["Question"],
+            "answer": faq_entry["Answer"],
+            "score": float(distances[0][i]),
+        })
+
+    # Render Results
+    if results:
+        st.markdown("### Top Results:")
+        for result in results:
+            with st.expander(f"Q: {result['question']}"):
+                st.write(f"**A:** {result['answer']}")
+                st.caption(f"Confidence Score: {result['score']:.2f}")
+    else:
+        st.warning("I'm sorry, I couldn't find a relevant answer. Can you try rephrasing?")
