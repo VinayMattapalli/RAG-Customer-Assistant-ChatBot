@@ -4,7 +4,7 @@ import faiss
 import numpy as np
 import pickle
 # Load your cleaned FAQ data
-faq_data = pd.read_csv(r'C:\\Users\\gkeer\\OneDrive\\Desktop\\career\\RAG_Project\\amazon_faq.csv', encoding='ISO-8859-1')
+faq_data = pd.read_csv(r'/filepath.csv', encoding='ISO-8859-1')
 
 
   # Update with your file name
